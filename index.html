@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ツヅク日記 | 気分+日記アプリ</title>
+  <meta name="description" content="毎日の気分と出来事を記録する日記アプリ。カレンダーで俯瞰し、統計で自分のパターンを発見。">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app" id="app">
+    <!-- ヘッダー -->
+    <header class="header">
+      <div class="header-left">
+        <span class="logo">📔</span>
+        <h1 class="app-title">ツヅク日記</h1>
+      </div>
+      <nav class="header-nav">
+        <button class="nav-btn active" data-view="today" id="nav-today">今日</button>
+        <button class="nav-btn" data-view="calendar" id="nav-calendar">📅</button>
+        <button class="nav-btn" data-view="stats" id="nav-stats">📊</button>
+      </nav>
+      <button class="theme-toggle" id="theme-toggle">🌙</button>
+    </header>
+
+    <!-- 今日の記録画面 -->
+    <main class="view active" id="view-today">
+      <!-- ストリーク -->
+      <div class="streak-banner" id="streak-banner">
+        <span class="streak-fire">🔥</span>
+        <span class="streak-count" id="streak-count">0</span>
+        <span class="streak-label">日連続</span>
+      </div>
+
+      <!-- 気分選択 -->
+      <section class="mood-section">
+        <h2 class="section-title">今日の気分は?</h2>
+        <div class="mood-buttons" id="mood-buttons">
+          <button class="mood-btn" data-mood="5" title="最高">😆</button>
+          <button class="mood-btn" data-mood="4" title="良い">😊</button>
+          <button class="mood-btn" data-mood="3" title="普通">😐</button>
+          <button class="mood-btn" data-mood="2" title="悪い">😢</button>
+          <button class="mood-btn" data-mood="1" title="最悪">😫</button>
+        </div>
+      </section>
+
+      <!-- タグ -->
+      <section class="tag-section">
+        <h2 class="section-title">今日の活動</h2>
+        <div class="tag-list" id="tag-list">
+          <button class="tag-chip" data-tag="仕事">💼 仕事</button>
+          <button class="tag-chip" data-tag="勉強">📚 勉強</button>
+          <button class="tag-chip" data-tag="運動">🏃 運動</button>
+          <button class="tag-chip" data-tag="友達">👥 友達</button>
+          <button class="tag-chip" data-tag="趣味">🎮 趣味</button>
+          <button class="tag-chip" data-tag="家族">👨‍👩‍👧 家族</button>
+          <button class="tag-chip" data-tag="休息">😴 休息</button>
+        </div>
+        <div class="custom-tag-wrapper">
+          <input type="text" class="custom-tag-input" id="custom-tag-input" placeholder="+ タグ追加" />
+        </div>
+      </section>
+
+      <!-- 日記テキストエリア -->
+      <section class="diary-section">
+        <h2 class="section-title">📝 今日のこと</h2>
+        <textarea class="diary-textarea" id="diary-textarea" placeholder="今日あったことを自由に書こう..."></textarea>
+        <div class="diary-meta">
+          <span class="char-count" id="char-count">0文字</span>
+          <span class="auto-save-indicator" id="auto-save">自動保存済み ✓</span>
+        </div>
+      </section>
+    </main>
+
+    <!-- カレンダー画面 -->
+    <main class="view" id="view-calendar">
+      <div class="calendar-container">
+        <div class="calendar-header">
+          <button class="cal-nav-btn" id="cal-prev">◀</button>
+          <h2 class="cal-month" id="cal-month"></h2>
+          <button class="cal-nav-btn" id="cal-next">▶</button>
+        </div>
+        <div class="calendar-grid">
+          <div class="cal-day-header">日</div>
+          <div class="cal-day-header">月</div>
+          <div class="cal-day-header">火</div>
+          <div class="cal-day-header">水</div>
+          <div class="cal-day-header">木</div>
+          <div class="cal-day-header">金</div>
+          <div class="cal-day-header">土</div>
+        </div>
+        <div class="calendar-days" id="calendar-days"></div>
+      </div>
+
+      <!-- 過去日記閲覧 -->
+      <div class="past-entry hidden" id="past-entry">
+        <h3 class="past-date" id="past-date"></h3>
+        <div class="past-mood" id="past-mood"></div>
+        <div class="past-tags" id="past-tags"></div>
+        <p class="past-diary" id="past-diary"></p>
+        <button class="close-past-btn" id="close-past">閉じる</button>
+      </div>
+    </main>
+
+    <!-- 統計画面 -->
+    <main class="view" id="view-stats">
+      <div class="stats-container">
+        <h2 class="stats-title">📊 統計</h2>
+        <div class="stats-cards">
+          <div class="stat-card">
+            <span class="stat-value" id="stat-entries">0</span>
+            <span class="stat-label">記録日数</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-value" id="stat-max-streak">0</span>
+            <span class="stat-label">最長連続</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-value" id="stat-total-chars">0</span>
+            <span class="stat-label">総文字数</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-value" id="stat-avg-mood">-</span>
+            <span class="stat-label">平均気分</span>
+          </div>
+        </div>
+        <div class="chart-section">
+          <h3>今月の気分の推移</h3>
+          <canvas id="mood-chart" width="600" height="200"></canvas>
+        </div>
+        <div class="chart-section">
+          <h3>気分の割合</h3>
+          <canvas id="mood-pie" width="300" height="300"></canvas>
+        </div>
+        <div class="top-tags">
+          <h3>よく使うタグ</h3>
+          <div id="tag-ranking"></div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
