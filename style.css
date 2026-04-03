@@ -1,41 +1,16 @@
 /* ===== ツヅク日記 - スタイルシート ===== */
 
 :root {
-  --bg-primary: #fdfcfa;
-  --bg-secondary: #ffffff;
-  --bg-tertiary: #f7f4f0;
-  --text-primary: #2c2825;
-  --text-secondary: #736b64;
-  --text-muted: #b0a69e;
-  --accent: #e67e22;
-  --accent-light: #fef3e6;
-  --accent-dark: #d35400;
-  --success: #27ae60;
-  --border: #ede8e3;
-  --mood-5: #f1c40f;
-  --mood-4: #2ecc71;
-  --mood-3: #3498db;
-  --mood-2: #9b59b6;
-  --mood-1: #e74c3c;
-  --shadow-sm: 0 2px 8px rgba(44, 40, 37, 0.05);
-  --shadow-md: 0 4px 16px rgba(44, 40, 37, 0.08);
-  --radius-sm: 8px;
-  --radius-md: 14px;
-  --radius-lg: 20px;
-  --radius-full: 999px;
+  --bg-primary:#f8f9fb;--bg-secondary:#fff;--bg-tertiary:#f0f2f5;--text-primary:#1a1d23;--text-secondary:#5f6577;--text-tertiary:#9098a9;--border-color:#e2e5eb;
+  --accent:#e67e22;--accent-hover:#d35400;--accent-light:#fef3e6;--accent-dark:#d35400;--success:#27ae60;--warning:#f1c40f;--danger:#e74c3c;
+  --shadow-sm:0 1px 2px rgba(0,0,0,.05);--shadow-md:0 4px 12px rgba(0,0,0,.08);--shadow-lg:0 8px 32px rgba(0,0,0,.12);
+  --border:var(--border-color);--text-muted:var(--text-tertiary);
+  --radius-sm:8px;--radius-md:14px;--radius-lg:20px;--radius-full:999px;
+  --mood-5:#f1c40f;--mood-4:#2ecc71;--mood-3:#3498db;--mood-2:#9b59b6;--mood-1:#e74c3c;
 }
-
 [data-theme="dark"] {
-  --bg-primary: #1c1917;
-  --bg-secondary: #292524;
-  --bg-tertiary: #352f2b;
-  --text-primary: #f5f0eb;
-  --text-secondary: #a8a099;
-  --text-muted: #6b6460;
-  --accent: #f59e0b;
-  --accent-light: #3d2e10;
-  --accent-dark: #d97706;
-  --border: #3d3832;
+  --bg-primary:#0f1117;--bg-secondary:#1a1d27;--bg-tertiary:#252833;--text-primary:#e8eaf0;--text-secondary:#9098a9;--text-tertiary:#5f6577;--border-color:#2e3240;
+  --accent-light:#3d2e10;--border:#2e3240;
 }
 
 *, *::before, *::after {
@@ -52,14 +27,14 @@ body {
   transition: background 0.3s, color 0.3s;
 }
 
-.app {
+.app-container {
   max-width: 520px;
   margin: 0 auto;
   padding: 0 20px 40px;
 }
 
 /* ===== Header ===== */
-.header {
+.app-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -564,6 +539,6 @@ body {
 }
 
 @media (max-width: 480px) {
-  .app { padding: 0 16px 32px; }
+  .app-container { padding: 0 16px 32px; }
   .mood-btn { width: 48px; height: 48px; font-size: 26px; }
 }
