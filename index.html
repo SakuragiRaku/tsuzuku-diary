@@ -27,11 +27,27 @@
 
     <!-- 今日の記録画面 -->
     <main class="view active" id="view-today">
-      <!-- ストリーク -->
-      <div class="streak-banner" id="streak-banner">
-        <span class="streak-fire">🔥</span>
-        <span class="streak-count" id="streak-count">0</span>
-        <span class="streak-label">日連続</span>
+      <!-- ストリークウィジェット (Duolingo風) -->
+      <div class="dashboard-widget" id="streak-widget">
+        <div class="widget-header">
+          <div class="widget-title">ストリーク</div>
+          <div class="streak-total">
+            <span class="streak-fire">🔥</span>
+            <span class="streak-count" id="streak-count">0</span>
+          </div>
+        </div>
+        <div class="weekly-streak-circles" id="weekly-streak-circles">
+          <div class="streak-day" data-day="1"><div class="day-circle"></div><span class="day-label">月</span></div>
+          <div class="streak-day" data-day="2"><div class="day-circle"></div><span class="day-label">火</span></div>
+          <div class="streak-day" data-day="3"><div class="day-circle"></div><span class="day-label">水</span></div>
+          <div class="streak-day" data-day="4"><div class="day-circle"></div><span class="day-label">木</span></div>
+          <div class="streak-day" data-day="5"><div class="day-circle"></div><span class="day-label">金</span></div>
+          <div class="streak-day" data-day="6"><div class="day-circle"></div><span class="day-label">土</span></div>
+          <div class="streak-day" data-day="0"><div class="day-circle"></div><span class="day-label">日</span></div>
+        </div>
+        <div class="widget-footer">
+          <span class="widget-message" id="streak-message">今日も記録して火を灯そう！</span>
+        </div>
       </div>
 
       <!-- 気分選択 -->

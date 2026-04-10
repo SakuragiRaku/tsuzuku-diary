@@ -30,8 +30,12 @@
     localStorage.setItem(DATA_KEY, JSON.stringify(data));
   }
 
+  function getLocalISODate(d) {
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  }
+
   function todayStr() {
-    return new Date().toISOString().slice(0, 10);
+    return getLocalISODate(new Date());
   }
 
   // ===== 初期化 =====
@@ -88,19 +92,79 @@
     const data = getAll();
     let streak = 0;
     const today = new Date();
+    
+    const isTodayDone = !!data[todayStr()];
 
+    // ストリーク計算 (今日やっていなくても作日はやっていれば継続中とする)
     for (let i = 0; i < 365; i++) {
       const d = new Date(today);
       d.setDate(d.getDate() - i);
-      const key = d.toISOString().slice(0, 10);
+      const key = getLocalISODate(d);
+      
       if (data[key]) {
         streak++;
       } else {
+        if (i === 0) continue; // 今日まだでもストリークは途切れない
         break;
       }
     }
 
-    $('#streak-count').textContent = streak;
+    const countEl = $('#streak-count');
+    if (countEl) countEl.textContent = streak;
+    
+    // 今日の状況に応じて火を点ける
+    const fireEl = $('.streak-fire');
+    const countTextEl = $('.streak-count');
+    const messageEl = $('#streak-message');
+    if (fireEl && countTextEl && messageEl) {
+      if (isTodayDone) {
+        fireEl.classList.add('active');
+        countTextEl.classList.add('active');
+        messageEl.textContent = '素晴らしい！今日の火が点きました🔥';
+      } else {
+        fireEl.classList.remove('active');
+        countTextEl.classList.remove('active');
+        messageEl.textContent = '今日も記録して火を灯そう！';
+      }
+    }
+
+    updateWeeklyWidget(data);
+  }
+
+  function updateWeeklyWidget(data) {
+    const today = new Date();
+    let dayOfWeek = today.getDay();
+    // 月曜始まり (月=0, 火=1, ... 日=6)
+    const mondayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+
+    const monday = new Date(today);
+    monday.setDate(today.getDate() - mondayOffset);
+
+    const dayEls = $$('.streak-day');
+    if (!dayEls || dayEls.length === 0) return;
+    
+    dayEls.forEach((el) => {
+      const targetDay = Number(el.dataset.day);
+      const targetDate = new Date(monday);
+      const addDays = targetDay === 0 ? 6 : targetDay - 1;
+      targetDate.setDate(monday.getDate() + addDays);
+      
+      const key = getLocalISODate(targetDate);
+      
+      // 今日の日付なら .today 付与
+      if (key === todayStr()) {
+        el.classList.add('today');
+      } else {
+        el.classList.remove('today');
+      }
+
+      // 記録があれば .completed 付与
+      if (data[key]) {
+        el.classList.add('completed');
+      } else {
+        el.classList.remove('completed');
+      }
+    });
   }
 
   // ===== カレンダー =====
@@ -123,7 +187,8 @@
 
     // 日セル
     for (let d = 1; d <= daysInMonth; d++) {
-      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      const targetDate = new Date(year, month, d);
+      const dateStr = getLocalISODate(targetDate);
       const entry = data[dateStr];
       const isToday = dateStr === todayKey;
       const hasEntry = !!entry;
@@ -221,7 +286,7 @@
 
     const points = [];
     for (let d = 1; d <= daysInMonth; d++) {
-      const key = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      const key = getLocalISODate(new Date(year, month, d));
       const entry = data[key];
       points.push({ day: d, mood: entry?.mood || null });
     }
