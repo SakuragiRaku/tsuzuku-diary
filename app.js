@@ -30,6 +30,11 @@
     // 認証状態の監視
     auth.onAuthStateChanged(async (user) => {
       if (user) {
+        // メール認証が完了しているか確認
+        if (!user.emailVerified) {
+          showVerifyScreen(user.email);
+          return;
+        }
         currentUser = user;
         hideLoginScreen();
         showApp();
@@ -47,6 +52,50 @@
   // ===== ログイン画面制御 =====
   function showLoginScreen() {
     $('#login-screen').style.display = 'flex';
+    $('#login-screen').innerHTML = `
+      <div class="login-card">
+        <div class="login-logo">📔</div>
+        <h1 class="login-title">ツヅク日記</h1>
+        <p class="login-subtitle">ログインして続ける</p>
+        <div class="login-error" id="login-error"></div>
+        <div class="form-group">
+          <input type="email" class="login-input" id="login-email" placeholder="メールアドレス" autocomplete="email">
+        </div>
+        <div class="form-group">
+          <input type="password" class="login-input" id="login-password" placeholder="パスワード" autocomplete="current-password">
+        </div>
+        <button class="login-btn" id="login-btn">ログイン</button>
+        <button class="signup-btn" id="signup-btn">新規登録</button>
+        <div class="login-loading" id="login-loading"><div class="loading-spinner"></div></div>
+      </div>`;
+    $('#app').classList.add('hidden');
+    // イベント再登録
+    $('#login-password').addEventListener('keydown', (e) => { if (e.key === 'Enter') handleLogin(); });
+    $('#login-btn').addEventListener('click', handleLogin);
+    $('#signup-btn').addEventListener('click', handleSignup);
+  }
+
+  function showVerifyScreen(email) {
+    const screen = $('#login-screen');
+    screen.style.display = 'flex';
+    screen.innerHTML = `
+      <div class="login-card">
+        <div class="login-logo">📧</div>
+        <h1 class="login-title" style="font-size:20px">メールを確認してください</h1>
+        <p class="login-subtitle" style="margin-bottom:20px">${email} に確認メールを送信しました。<br>メール内のリンクをクリックしてから、下のボタンを押してください。</p>
+        <button class="login-btn" id="verify-reload-btn" onclick="location.reload()">確認完了 → 再読み込み</button>
+        <button class="signup-btn" id="verify-resend-btn">確認メールを再送する</button>
+        <button class="signup-btn" style="margin-top:6px;color:var(--danger);border-color:var(--danger)" onclick="firebase.auth().signOut()">別のアカウントでログイン</button>
+      </div>`;
+    $('#verify-resend-btn').addEventListener('click', async () => {
+      try {
+        await auth.currentUser.sendEmailVerification();
+        $('#verify-resend-btn').textContent = '送信しました！';
+        $('#verify-resend-btn').disabled = true;
+      } catch(e) {
+        alert('送信に失敗しました。しばらく待ってから再試行してください。');
+      }
+    });
     $('#app').classList.add('hidden');
   }
 
@@ -107,7 +156,10 @@
     hideLoginError();
     setLoginLoading(true);
     try {
-      await auth.createUserWithEmailAndPassword(email, password);
+      const cred = await auth.createUserWithEmailAndPassword(email, password);
+      // 確認メールを送信
+      await cred.user.sendEmailVerification();
+      // 認証状態監視側でshowVerifyScreenに自動で切り替わる
     } catch (e) {
       setLoginLoading(false);
       const msg = e.code === 'auth/email-already-in-use'
