@@ -1,54 +1,208 @@
-// app.js - ツヅク日記 メインロジック
+// app.js - ツヅク日記 Firebase対応版
 
 (function() {
   'use strict';
 
-  const DATA_KEY = 'tsuzuku-diary-data';
   const MOODS = { 5: '😆', 4: '😊', 3: '😐', 2: '😢', 1: '😫' };
   const MOOD_LABELS = { 5: '最高', 4: '良い', 3: '普通', 2: '悪い', 1: '最悪' };
   const MOOD_COLORS = { 5: '#f1c40f', 4: '#2ecc71', 3: '#3498db', 2: '#9b59b6', 1: '#e74c3c' };
 
+  let db, auth;
+  let currentUser = null;
+  let localData = {}; // ローカルキャッシュ
   let calendarMonth = new Date();
   let autoSaveTimer = null;
 
   const $ = (sel) => document.querySelector(sel);
   const $$ = (sel) => document.querySelectorAll(sel);
 
-  // ===== データ管理 =====
-  function getAll() {
-    try { return JSON.parse(localStorage.getItem(DATA_KEY) || '{}'); }
-    catch { return {}; }
+  // ===== Firebase初期化 =====
+  function initFirebase() {
+    if (typeof FIREBASE_CONFIG === 'undefined') {
+      console.error('ai-config.jsが読み込まれていません');
+      return false;
+    }
+    firebase.initializeApp(FIREBASE_CONFIG);
+    db = firebase.firestore();
+    auth = firebase.auth();
+
+    // 認証状態の監視
+    auth.onAuthStateChanged(async (user) => {
+      if (user) {
+        currentUser = user;
+        hideLoginScreen();
+        showApp();
+        await loadAllData();
+        setupEventListeners();
+        applyTheme();
+      } else {
+        currentUser = null;
+        showLoginScreen();
+      }
+    });
+    return true;
   }
 
-  function getEntry(dateStr) {
-    return getAll()[dateStr] || null;
+  // ===== ログイン画面制御 =====
+  function showLoginScreen() {
+    $('#login-screen').style.display = 'flex';
+    $('#app').classList.add('hidden');
   }
 
-  function saveEntry(dateStr, entry) {
-    const data = getAll();
-    data[dateStr] = entry;
-    localStorage.setItem(DATA_KEY, JSON.stringify(data));
+  function hideLoginScreen() {
+    $('#login-screen').style.display = 'none';
+  }
+
+  function showApp() {
+    $('#app').classList.remove('hidden');
+  }
+
+  function showLoginError(msg) {
+    const el = $('#login-error');
+    el.textContent = msg;
+    el.classList.add('show');
+  }
+
+  function hideLoginError() {
+    $('#login-error').classList.remove('show');
+  }
+
+  function setLoginLoading(show) {
+    $('#login-loading').classList.toggle('show', show);
+  }
+
+  // ===== 認証処理 =====
+  async function handleLogin() {
+    const email = $('#login-email').value.trim();
+    const password = $('#login-password').value;
+    if (!email || !password) {
+      showLoginError('メールアドレスとパスワードを入力してください');
+      return;
+    }
+    hideLoginError();
+    setLoginLoading(true);
+    try {
+      await auth.signInWithEmailAndPassword(email, password);
+    } catch (e) {
+      setLoginLoading(false);
+      const msg = e.code === 'auth/invalid-credential' || e.code === 'auth/wrong-password' || e.code === 'auth/user-not-found'
+        ? 'メールアドレスまたはパスワードが間違っています'
+        : 'ログインに失敗しました。もう一度お試しください';
+      showLoginError(msg);
+    }
+  }
+
+  async function handleSignup() {
+    const email = $('#login-email').value.trim();
+    const password = $('#login-password').value;
+    if (!email || !password) {
+      showLoginError('メールアドレスとパスワードを入力してください');
+      return;
+    }
+    if (password.length < 6) {
+      showLoginError('パスワードは6文字以上にしてください');
+      return;
+    }
+    hideLoginError();
+    setLoginLoading(true);
+    try {
+      await auth.createUserWithEmailAndPassword(email, password);
+    } catch (e) {
+      setLoginLoading(false);
+      const msg = e.code === 'auth/email-already-in-use'
+        ? 'このメールアドレスはすでに使用されています'
+        : '登録に失敗しました。もう一度お試しください';
+      showLoginError(msg);
+    }
+  }
+
+  async function handleLogout() {
+    if (!confirm('ログアウトしますか？')) return;
+    await auth.signOut();
+    localData = {};
+  }
+
+  // ===== データ管理（Firestore） =====
+  function userRef() {
+    return db.collection('users').doc(currentUser.uid).collection('diary_entries');
+  }
+
+  function todayStr() {
+    const d = new Date();
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
   }
 
   function getLocalISODate(d) {
     return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
   }
 
-  function todayStr() {
-    return getLocalISODate(new Date());
+  function showSync(text = '同期中...') {
+    const bar = $('#sync-bar');
+    if (bar) {
+      $('#sync-text').textContent = text;
+      bar.classList.add('show');
+    }
   }
 
-  // ===== 初期化 =====
-  function init() {
-    setupEventListeners();
+  function hideSync() {
+    const bar = $('#sync-bar');
+    if (bar) bar.classList.remove('show');
+  }
+
+  // 全データをFirestoreから読み込む
+  async function loadAllData() {
+    showSync('データを読み込み中...');
+    try {
+      const snapshot = await userRef().get();
+      localData = {};
+      snapshot.forEach(doc => {
+        localData[doc.id] = doc.data();
+      });
+    } catch (e) {
+      console.error('データ読み込み失敗:', e);
+    }
+    hideSync();
     loadTodayEntry();
     updateStreak();
-    applyTheme();
+  }
+
+  // 今日のデータをFirestoreへ保存
+  async function saveTodayToFirestore(entry) {
+    if (!currentUser) return;
+    showSync('保存中...');
+    try {
+      await userRef().doc(todayStr()).set(entry);
+      localData[todayStr()] = entry;
+      // ストリーク情報も更新
+      await syncStreakToPublic();
+    } catch (e) {
+      console.error('保存失敗:', e);
+    }
+    hideSync();
+  }
+
+  // ストリーク用のPublicドキュメントへ書き込み（KWGTウィジェット用）
+  async function syncStreakToPublic() {
+    const streak = calcStreak(localData);
+    const isTodayDone = !!localData[todayStr()];
+    const weeklyStatus = calcWeeklyStatus(localData);
+
+    try {
+      await db.collection('public').doc('streaks').set({
+        streak,
+        is_today_done: isTodayDone,
+        weekly: weeklyStatus,
+        last_updated: new Date().toISOString()
+      });
+    } catch (e) {
+      // Publicへの書き込みエラーはサイレント
+      console.warn('Public streak sync failed:', e);
+    }
   }
 
   // ===== 今日の記録 =====
   function loadTodayEntry() {
-    const entry = getEntry(todayStr());
+    const entry = localData[todayStr()];
     if (!entry) return;
 
     if (entry.mood) {
@@ -74,45 +228,68 @@
     const tags = Array.from($$('.tag-chip.active')).map(c => c.dataset.tag);
     const diary = $('#diary-textarea').value;
 
-    saveEntry(todayStr(), {
+    const entry = {
       mood: mood ? parseInt(mood) : null,
       tags,
       diary,
       updatedAt: new Date().toISOString(),
-    });
+    };
 
-    // 自動保存インジケーター
+    // ローカルキャッシュに即時反映
+    localData[todayStr()] = entry;
+
+    // 自動保存インジケーター（ローカル表示）
     const indicator = $('#auto-save');
     indicator.classList.add('show');
     setTimeout(() => indicator.classList.remove('show'), 2000);
+
+    // Firestoreへ非同期保存
+    saveTodayToFirestore(entry);
+
+    updateStreak();
   }
 
   // ===== ストリーク =====
-  function updateStreak() {
-    const data = getAll();
+  function calcStreak(data) {
     let streak = 0;
     const today = new Date();
-    
-    const isTodayDone = !!data[todayStr()];
-
-    // ストリーク計算 (今日やっていなくても作日はやっていれば継続中とする)
     for (let i = 0; i < 365; i++) {
       const d = new Date(today);
       d.setDate(d.getDate() - i);
       const key = getLocalISODate(d);
-      
       if (data[key]) {
         streak++;
       } else {
-        if (i === 0) continue; // 今日まだでもストリークは途切れない
+        if (i === 0) continue;
         break;
       }
     }
+    return streak;
+  }
+
+  function calcWeeklyStatus(data) {
+    const today = new Date();
+    let dayOfWeek = today.getDay();
+    const mondayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    const monday = new Date(today);
+    monday.setDate(today.getDate() - mondayOffset);
+    const weeklyStatus = [];
+    for (let i = 0; i < 7; i++) {
+      const targetDate = new Date(monday);
+      targetDate.setDate(monday.getDate() + i);
+      const key = getLocalISODate(targetDate);
+      weeklyStatus.push(!!data[key]);
+    }
+    return weeklyStatus;
+  }
+
+  function updateStreak() {
+    const streak = calcStreak(localData);
+    const isTodayDone = !!localData[todayStr()];
 
     const countEl = $('#streak-count');
     if (countEl) countEl.textContent = streak;
-    
-    // 今日の状況に応じて火を点ける
+
     const fireEl = $('.streak-fire');
     const countTextEl = $('.streak-count');
     const messageEl = $('#streak-message');
@@ -128,92 +305,28 @@
       }
     }
 
-    updateWeeklyWidget(data);
-
-    // クラウド（JSONBin）へ同期する
-    const weeklyStatus = calculateWeeklyStatus(data);
-    syncToJSONBin(streak, isTodayDone, weeklyStatus);
-  }
-
-  function calculateWeeklyStatus(data) {
-    const today = new Date();
-    let dayOfWeek = today.getDay();
-    const mondayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-    const monday = new Date(today);
-    monday.setDate(today.getDate() - mondayOffset);
-
-    const weeklyStatus = [];
-    for (let i = 0; i < 7; i++) {
-      const targetDate = new Date(monday);
-      targetDate.setDate(monday.getDate() + i);
-      const key = getLocalISODate(targetDate);
-      weeklyStatus.push(!!data[key]);
-    }
-    return weeklyStatus;
-  }
-
-  async function syncToJSONBin(streak, isTodayDone, weeklyData) {
-    if (typeof JSONBIN_MASTER_KEY === 'undefined' || JSONBIN_MASTER_KEY === 'YOUR_SECRET_KEY') return;
-    if (typeof JSONBIN_BIN_ID === 'undefined' || JSONBIN_BIN_ID === 'YOUR_BIN_ID') return;
-
-    const payload = {
-      streak: streak,
-      is_today_done: isTodayDone,
-      weekly: weeklyData,
-      last_updated: new Date().toISOString()
-    };
-
-    try {
-      const response = await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Master-Key': JSONBIN_MASTER_KEY
-        },
-        body: JSON.stringify(payload)
-      });
-      // 成功してもサイレント。失敗した場合はコンソールへ表示。
-      if (!response.ok) {
-        console.error('JSONBin sync failed:', response.status);
-      }
-    } catch (e) {
-      console.error('JSONBin sync error:', e);
-    }
+    updateWeeklyWidget(localData);
   }
 
   function updateWeeklyWidget(data) {
     const today = new Date();
     let dayOfWeek = today.getDay();
-    // 月曜始まり (月=0, 火=1, ... 日=6)
     const mondayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-
     const monday = new Date(today);
     monday.setDate(today.getDate() - mondayOffset);
 
     const dayEls = $$('.streak-day');
     if (!dayEls || dayEls.length === 0) return;
-    
+
     dayEls.forEach((el) => {
       const targetDay = Number(el.dataset.day);
       const targetDate = new Date(monday);
       const addDays = targetDay === 0 ? 6 : targetDay - 1;
       targetDate.setDate(monday.getDate() + addDays);
-      
       const key = getLocalISODate(targetDate);
-      
-      // 今日の日付なら .today 付与
-      if (key === todayStr()) {
-        el.classList.add('today');
-      } else {
-        el.classList.remove('today');
-      }
 
-      // 記録があれば .completed 付与
-      if (data[key]) {
-        el.classList.add('completed');
-      } else {
-        el.classList.remove('completed');
-      }
+      el.classList.toggle('today', key === todayStr());
+      el.classList.toggle('completed', !!data[key]);
     });
   }
 
@@ -225,21 +338,16 @@
 
     const firstDay = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const data = getAll();
     const todayKey = todayStr();
 
     let html = '';
-
-    // 空セル
     for (let i = 0; i < firstDay; i++) {
       html += '<div class="cal-cell empty"></div>';
     }
-
-    // 日セル
     for (let d = 1; d <= daysInMonth; d++) {
       const targetDate = new Date(year, month, d);
       const dateStr = getLocalISODate(targetDate);
-      const entry = data[dateStr];
+      const entry = localData[dateStr];
       const isToday = dateStr === todayKey;
       const hasEntry = !!entry;
 
@@ -251,12 +359,11 @@
         </div>
       `;
     }
-
     $('#calendar-days').innerHTML = html;
   }
 
   function showPastEntry(dateStr) {
-    const entry = getEntry(dateStr);
+    const entry = localData[dateStr];
     const panel = $('#past-entry');
 
     if (!entry) {
@@ -277,16 +384,13 @@
 
   // ===== 統計 =====
   function renderStats() {
-    const data = getAll();
-    const entries = Object.entries(data);
+    const entries = Object.entries(localData);
 
-    // 基本統計
     $('#stat-entries').textContent = entries.length;
 
-    // 最長ストリーク
     let maxStreak = 0;
     let currentStreak = 0;
-    const sortedDates = Object.keys(data).sort();
+    const sortedDates = Object.keys(localData).sort();
     for (let i = 0; i < sortedDates.length; i++) {
       if (i === 0) { currentStreak = 1; }
       else {
@@ -299,21 +403,18 @@
     }
     $('#stat-max-streak').textContent = maxStreak;
 
-    // 総文字数
     const totalChars = entries.reduce((sum, [, e]) => sum + (e.diary?.length || 0), 0);
     $('#stat-total-chars').textContent = totalChars.toLocaleString();
 
-    // 平均気分
     const moodEntries = entries.filter(([, e]) => e.mood);
     const avgMood = moodEntries.length > 0
       ? (moodEntries.reduce((sum, [, e]) => sum + e.mood, 0) / moodEntries.length).toFixed(1)
       : '-';
     $('#stat-avg-mood').textContent = avgMood !== '-' ? MOODS[Math.round(parseFloat(avgMood))] + ' ' + avgMood : '-';
 
-    // グラフ
-    drawMoodChart(data);
-    drawMoodPie(data);
-    drawTagRanking(data);
+    drawMoodChart(localData);
+    drawMoodPie(localData);
+    drawTagRanking(localData);
   }
 
   function drawMoodChart(data) {
@@ -346,7 +447,6 @@
     const gridColor = style.getPropertyValue('--border').trim();
     const accentColor = style.getPropertyValue('--accent').trim();
 
-    // グリッド
     ctx.strokeStyle = gridColor;
     ctx.lineWidth = 0.5;
     ctx.fillStyle = textColor;
@@ -361,7 +461,6 @@
       ctx.fillText(MOODS[i], pad.left - 6, y + 4);
     }
 
-    // 折れ線
     const validPoints = points.filter(p => p.mood);
     if (validPoints.length < 2) return;
 
@@ -378,7 +477,6 @@
     });
     ctx.stroke();
 
-    // ドット
     validPoints.forEach(p => {
       const x = pad.left + ((p.day - 1) / (daysInMonth - 1)) * (w - pad.left - pad.right);
       const y = pad.top + (h - pad.top - pad.bottom) * (1 - (p.mood - 1) / 4);
@@ -401,9 +499,7 @@
     ctx.clearRect(0, 0, size, size);
 
     const counts = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
-    Object.values(data).forEach(e => {
-      if (e.mood) counts[e.mood]++;
-    });
+    Object.values(data).forEach(e => { if (e.mood) counts[e.mood]++; });
 
     const total = Object.values(counts).reduce((a, b) => a + b, 0);
     if (total === 0) return;
@@ -416,14 +512,11 @@
     [5, 4, 3, 2, 1].forEach(mood => {
       if (counts[mood] === 0) return;
       const slice = (counts[mood] / total) * Math.PI * 2;
-
       ctx.beginPath();
       ctx.moveTo(cx, cy);
       ctx.arc(cx, cy, r, startAngle, startAngle + slice);
       ctx.fillStyle = MOOD_COLORS[mood];
       ctx.fill();
-
-      // ラベル
       if (slice > 0.3) {
         const mid = startAngle + slice / 2;
         const lx = cx + (r * 0.65) * Math.cos(mid);
@@ -433,7 +526,6 @@
         ctx.textAlign = 'center';
         ctx.fillText(MOODS[mood], lx, ly + 5);
       }
-
       startAngle += slice;
     });
   }
@@ -462,7 +554,7 @@
 
   // ===== テーマ =====
   function applyTheme() {
-    const theme = localStorage.getItem('tsuzuku-theme') || 'light';
+    const theme = localStorage.getItem('tsuzuku-theme') || 'dark';
     document.documentElement.setAttribute('data-theme', theme);
     $('#theme-toggle').textContent = theme === 'dark' ? '☀️' : '🌙';
   }
@@ -477,6 +569,9 @@
 
   // ===== イベント =====
   function setupEventListeners() {
+    // ログアウト
+    $('#logout-btn').addEventListener('click', handleLogout);
+
     // ナビゲーション
     $$('.nav-btn').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -484,7 +579,6 @@
         btn.classList.add('active');
         $$('.view').forEach(v => v.classList.remove('active'));
         $(`#view-${btn.dataset.view}`).classList.add('active');
-
         if (btn.dataset.view === 'calendar') renderCalendar();
         if (btn.dataset.view === 'stats') renderStats();
       });
@@ -496,7 +590,6 @@
         $$('.mood-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         saveTodayEntry();
-        updateStreak();
       });
     });
 
@@ -531,10 +624,7 @@
       const len = $('#diary-textarea').value.length;
       $('#char-count').textContent = len + '文字';
       clearTimeout(autoSaveTimer);
-      autoSaveTimer = setTimeout(() => {
-        saveTodayEntry();
-        updateStreak();
-      }, 500);
+      autoSaveTimer = setTimeout(saveTodayEntry, 800);
     });
 
     // カレンダーナビ
@@ -542,7 +632,6 @@
       calendarMonth.setMonth(calendarMonth.getMonth() - 1);
       renderCalendar();
     });
-
     $('#cal-next').addEventListener('click', () => {
       calendarMonth.setMonth(calendarMonth.getMonth() + 1);
       renderCalendar();
@@ -563,5 +652,18 @@
     $('#theme-toggle').addEventListener('click', toggleTheme);
   }
 
-  document.addEventListener('DOMContentLoaded', init);
+  // ===== ログインボタンのイベント（DOMContentLoaded後に登録） =====
+  document.addEventListener('DOMContentLoaded', () => {
+    // Enterキーでログイン
+    $('#login-password').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') handleLogin();
+    });
+    $('#login-btn').addEventListener('click', handleLogin);
+    $('#signup-btn').addEventListener('click', handleSignup);
+
+    // Firebase初期化
+    if (!initFirebase()) {
+      $('#login-screen').innerHTML = '<div style="text-align:center;padding:40px;color:red">設定ファイルの読み込みに失敗しました</div>';
+    }
+  });
 })();
