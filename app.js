@@ -19,7 +19,8 @@
   // ===== Firebase初期化 =====
   function initFirebase() {
     if (typeof FIREBASE_CONFIG === 'undefined') {
-      console.error('ai-config.jsが読み込まれていません');
+      const loginScreen = document.getElementById('login-screen');
+      if (loginScreen) loginScreen.innerHTML = '<div style="text-align:center;padding:40px;color:red;font-family:sans-serif">設定ファイルの読み込みに失敗しました<br><small>firebase-config.jsを確認してください</small></div>';
       return false;
     }
     firebase.initializeApp(FIREBASE_CONFIG);
