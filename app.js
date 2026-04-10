@@ -129,6 +129,56 @@
     }
 
     updateWeeklyWidget(data);
+
+    // クラウド（JSONBin）へ同期する
+    const weeklyStatus = calculateWeeklyStatus(data);
+    syncToJSONBin(streak, isTodayDone, weeklyStatus);
+  }
+
+  function calculateWeeklyStatus(data) {
+    const today = new Date();
+    let dayOfWeek = today.getDay();
+    const mondayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    const monday = new Date(today);
+    monday.setDate(today.getDate() - mondayOffset);
+
+    const weeklyStatus = [];
+    for (let i = 0; i < 7; i++) {
+      const targetDate = new Date(monday);
+      targetDate.setDate(monday.getDate() + i);
+      const key = getLocalISODate(targetDate);
+      weeklyStatus.push(!!data[key]);
+    }
+    return weeklyStatus;
+  }
+
+  async function syncToJSONBin(streak, isTodayDone, weeklyData) {
+    if (typeof JSONBIN_MASTER_KEY === 'undefined' || JSONBIN_MASTER_KEY === 'YOUR_SECRET_KEY') return;
+    if (typeof JSONBIN_BIN_ID === 'undefined' || JSONBIN_BIN_ID === 'YOUR_BIN_ID') return;
+
+    const payload = {
+      streak: streak,
+      is_today_done: isTodayDone,
+      weekly: weeklyData,
+      last_updated: new Date().toISOString()
+    };
+
+    try {
+      const response = await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Master-Key': JSONBIN_MASTER_KEY
+        },
+        body: JSON.stringify(payload)
+      });
+      // 成功してもサイレント。失敗した場合はコンソールへ表示。
+      if (!response.ok) {
+        console.error('JSONBin sync failed:', response.status);
+      }
+    } catch (e) {
+      console.error('JSONBin sync error:', e);
+    }
   }
 
   function updateWeeklyWidget(data) {
