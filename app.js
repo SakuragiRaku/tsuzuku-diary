@@ -39,6 +39,7 @@
         hideLoginScreen();
         showApp();
         await loadAllData();
+        await syncStreakToPublic(); // アプリ起動時にウィジェット用データを更新
         setupEventListeners();
         applyTheme();
       } else {
