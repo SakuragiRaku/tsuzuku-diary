@@ -236,12 +236,14 @@
 
   // ストリーク用のPublicドキュメントへ書き込み（KWGTウィジェット用）
   async function syncStreakToPublic() {
+    if (!currentUser) return;
+    
     const streak = calcStreak(localData);
     const isTodayDone = !!localData[todayStr()];
     const weeklyStatus = calcWeeklyStatus(localData);
 
     try {
-      await db.collection('public').doc('streaks').set({
+      await db.collection('public_streaks').doc(currentUser.uid).set({
         streak,
         is_today_done: isTodayDone,
         weekly: weeklyStatus,
