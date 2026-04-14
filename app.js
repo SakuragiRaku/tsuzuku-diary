@@ -244,12 +244,20 @@
     const weeklyStatus = calcWeeklyStatus(localData);
 
     try {
-      await db.collection('public_streaks').doc(currentUser.uid).set({
+      const payload = {
         streak,
         is_today_done: isTodayDone,
-        weekly: weeklyStatus,
         last_updated: new Date().toISOString()
-      });
+      };
+      
+      // KWGTの配列パースエラーを回避するため、フラットなキー(weekly_0 ~ weekly_6)で保存
+      if (Array.isArray(weeklyStatus)) {
+        weeklyStatus.forEach((status, i) => {
+          payload[`weekly_${i}`] = status;
+        });
+      }
+
+      await db.collection('public_streaks').doc(currentUser.uid).set(payload);
     } catch (e) {
       // Publicへの書き込みエラーはサイレント
       console.warn('Public streak sync failed:', e);
